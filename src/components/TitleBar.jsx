@@ -1,5 +1,5 @@
 import React from 'react';
-import { Layers, List, BarChart3, Upload, Download, Plus, Moon, Sun, Volume2, VolumeX, Sparkles } from 'lucide-react';
+import { Layers, List, BarChart3, Upload, Plus, Moon, Sun, Volume2, VolumeX, Sparkles, Brain, ArrowLeftRight } from 'lucide-react';
 
 export default function TitleBar({
   activeView,
@@ -9,9 +9,11 @@ export default function TitleBar({
   setDarkMode,
   autoAudio,
   setAutoAudio,
+  cardOrder,
+  setCardOrder,
+  dueCount,
   onOpenImportExport,
-  onOpenAddCard,
-  onOpenNewDeck
+  onOpenAddCard
 }) {
   return (
     <header className="mac-titlebar flex items-center justify-between px-4 py-3 select-none border-b border-mac-border bg-mac-header backdrop-blur-xl">
@@ -43,13 +45,30 @@ export default function TitleBar({
         <button
           onClick={() => setActiveView('cards')}
           className={`flex items-center gap-1.5 px-3 py-1 text-xs font-medium rounded-md transition-all ${
-            activeView === 'cards'
+            activeView === 'cards' || activeView === 'quiz'
               ? 'bg-mac-accent text-white shadow-sm'
               : 'text-mac-subtext hover:text-mac-text hover:bg-mac-hover'
           }`}
         >
           <Layers className="w-3.5 h-3.5" />
           <span>闪卡背词</span>
+        </button>
+
+        <button
+          onClick={() => setActiveView('ebbinghaus')}
+          className={`flex items-center gap-1.5 px-3 py-1 text-xs font-medium rounded-md transition-all ${
+            activeView === 'ebbinghaus'
+              ? 'bg-amber-500 text-black font-bold shadow-sm'
+              : 'text-mac-subtext hover:text-mac-text hover:bg-mac-hover'
+          }`}
+        >
+          <Brain className="w-3.5 h-3.5" />
+          <span>艾宾浩斯复习</span>
+          {dueCount > 0 && (
+            <span className="ml-0.5 px-1.5 py-0.2 text-[10px] rounded-full bg-red-500 text-white font-mono font-bold">
+              {dueCount}
+            </span>
+          )}
         </button>
 
         <button
@@ -79,6 +98,16 @@ export default function TitleBar({
 
       {/* Right Controls */}
       <div className="flex items-center justify-end gap-2 w-1/4">
+        {/* Toggle Front/Back Order (English -> Chinese vs Chinese -> English) */}
+        <button
+          onClick={() => setCardOrder(cardOrder === 'en-zh' ? 'zh-en' : 'en-zh')}
+          title={cardOrder === 'en-zh' ? '当前：正面英文 ➔ 背面中文 (点击切换为正面中文)' : '当前：正面中文 ➔ 背面英文 (点击切换为正面英文)'}
+          className="flex items-center gap-1 px-2.5 py-1 text-xs font-medium rounded-md bg-purple-500/15 text-purple-400 border border-purple-500/30 hover:bg-purple-500 hover:text-white transition-all"
+        >
+          <ArrowLeftRight className="w-3.5 h-3.5" />
+          <span>{cardOrder === 'en-zh' ? '英 ➔ 中' : '中 ➔ 英'}</span>
+        </button>
+
         {/* Add Card Quick Button */}
         <button
           onClick={onOpenAddCard}

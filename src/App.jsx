@@ -2,22 +2,33 @@ import React, { useState, useEffect } from 'react';
 import TitleBar from './components/TitleBar';
 import Sidebar from './components/Sidebar';
 import FlashCardView from './components/FlashCardView';
+import SpellingQuizView from './components/SpellingQuizView';
+import EbbinghausView from './components/EbbinghausView';
 import DeckManager from './components/DeckManager';
 import StatsView from './components/StatsView';
 import ImportExportModal from './components/ImportExportModal';
 import CardEditModal from './components/CardEditModal';
 
 import { loadDecks, saveCustomDecks, loadSettings, saveSettings, loadTheme, saveTheme } from './utils/storage';
+import { calculateNextReview, getDueReviewCards } from './utils/ebbinghaus';
 
 export default function App() {
   const [decks, setDecks] = useState(() => loadDecks());
   const [activeDeckId, setActiveDeckId] = useState(() => decks[0]?.id || 'preset_cet4');
-  const [activeView, setActiveView] = useState('cards'); // 'cards' | 'manage' | 'stats'
+  const [activeView, setActiveView] = useState('cards'); // 'cards' | 'quiz' | 'ebbinghaus' | 'manage' | 'stats'
   const [filterMode, setFilterMode] = useState('all'); // 'all' | 'learning' | 'mastered'
   const [darkMode, setDarkMode] = useState(() => loadTheme() === 'dark');
   
+  // Settings & Card Order
   const [settings, setSettings] = useState(() => loadSettings());
   const [autoAudio, setAutoAudio] = useState(settings.autoPlayAudio);
+  const [cardOrder, setCardOrder] = useState('en-zh'); // 'en-zh' (英->中) | 'zh-en' (中->英)
+  const [groupSize, setGroupSize] = useState(5);       // Group size: 5, 10, 15, 20
+
+  // Quiz Mode state
+  const [quizCards, setQuizCards] = useState([]);
+  const [quizGroupIndex, setQuizGroupIndex] = useState(0);
+  const [quizTotalGroups, setQuizTotalGroups] = useState(1);
 
   // Modals
   const [isImportExportOpen, setIsImportExportOpen] = useState(false);
@@ -34,7 +45,7 @@ export default function App() {
     saveTheme(darkMode ? 'dark' : 'light');
   }, [darkMode]);
 
-  // Sync autoAudio setting
+  // Sync settings
   useEffect(() => {
     setSettings(prev => {
       const updated = { ...prev, autoPlayAudio: autoAudio };
@@ -50,6 +61,11 @@ export default function App() {
 
   const activeDeck = decks.find(d => d.id === activeDeckId) || decks[0];
 
+  // Calculate Ebbinghaus due cards count
+  let allCards = [];
+  decks.forEach(d => allCards.push(...d.cards));
+  const dueReviewCards = getDueReviewCards(allCards);
+
   // Filter active deck cards based on filterMode
   const activeDeckCards = activeDeck ? activeDeck.cards.filter(c => {
     if (filterMode === 'mastered') return c.mastered;
@@ -57,15 +73,18 @@ export default function App() {
     return true;
   }) : [];
 
-  // Card Mastery Update Handler
-  const handleUpdateCardMastery = (cardId, mastered) => {
+  // Card Mastery & Ebbinghaus SRS Update
+  const handleUpdateCardMastery = (cardId, isCorrect) => {
     setDecks(prevDecks => prevDecks.map(deck => {
       if (deck.id === activeDeckId) {
         return {
           ...deck,
-          cards: deck.cards.map(card => 
-            card.id === cardId ? { ...card, mastered, reviewCount: card.reviewCount + 1 } : card
-          )
+          cards: deck.cards.map(card => {
+            if (card.id === cardId) {
+              return calculateNextReview(card, isCorrect);
+            }
+            return card;
+          })
         };
       }
       return deck;
@@ -80,11 +99,52 @@ export default function App() {
       if (deck.id === activeDeckId) {
         return {
           ...deck,
-          cards: deck.cards.map(c => ({ ...c, mastered: false, reviewCount: 0 }))
+          cards: deck.cards.map(c => ({
+            ...c,
+            mastered: false,
+            reviewCount: 0,
+            ebbinghausStage: 0,
+            nextReviewDate: null
+          }))
         };
       }
       return deck;
     }));
+  };
+
+  // Trigger Group Spelling Quiz
+  const handleStartGroupQuiz = (groupCards, groupIdx, totalGroups) => {
+    setQuizCards(groupCards);
+    setQuizGroupIndex(groupIdx);
+    setQuizTotalGroups(totalGroups);
+    setActiveView('quiz');
+  };
+
+  // Complete Group Quiz
+  const handleCompleteQuiz = (completedCards) => {
+    // Update all cards in quiz with Ebbinghaus progress
+    setDecks(prevDecks => prevDecks.map(deck => {
+      if (deck.id === activeDeckId) {
+        return {
+          ...deck,
+          cards: deck.cards.map(c => {
+            if (completedCards.some(qc => qc.id === c.id)) {
+              return calculateNextReview(c, true);
+            }
+            return c;
+          })
+        };
+      }
+      return deck;
+    }));
+  };
+
+  // Start Ebbinghaus Review Mode
+  const handleStartEbbinghausReview = (dueCards) => {
+    setQuizCards(dueCards);
+    setQuizGroupIndex(0);
+    setQuizTotalGroups(1);
+    setActiveView('quiz');
   };
 
   // Create New Custom Deck
@@ -116,7 +176,7 @@ export default function App() {
     }
   };
 
-  // Save Single Card (Add or Edit)
+  // Save Single Card
   const handleSaveCard = (cardData) => {
     setDecks(prevDecks => prevDecks.map(deck => {
       if (deck.id === activeDeckId) {
@@ -156,7 +216,7 @@ export default function App() {
       if (deck.id === activeDeckId) {
         return {
           ...deck,
-          cards: deck.cards.map(c => c.id === cardId ? { ...c, mastered: !c.mastered } : c)
+          cards: deck.cards.map(c => c.id === cardId ? calculateNextReview(c, !c.mastered) : c)
         };
       }
       return deck;
@@ -196,12 +256,14 @@ export default function App() {
         setDarkMode={setDarkMode}
         autoAudio={autoAudio}
         setAutoAudio={setAutoAudio}
+        cardOrder={cardOrder}
+        setCardOrder={setCardOrder}
+        dueCount={dueReviewCards.length}
         onOpenImportExport={() => setIsImportExportOpen(true)}
         onOpenAddCard={() => {
           setEditingCard(null);
           setIsCardEditOpen(true);
         }}
-        onOpenNewDeck={handleCreateNewDeck}
       />
 
       {/* Main Workspace Layout */}
@@ -224,8 +286,36 @@ export default function App() {
               cards={activeDeckCards}
               activeDeckName={activeDeck ? activeDeck.name : ''}
               autoAudio={autoAudio}
+              cardOrder={cardOrder}
+              groupSize={groupSize}
+              setGroupSize={setGroupSize}
               onUpdateCardMastery={handleUpdateCardMastery}
               onResetDeck={handleResetDeckProgress}
+              onStartGroupQuiz={handleStartGroupQuiz}
+            />
+          )}
+
+          {activeView === 'quiz' && (
+            <SpellingQuizView
+              quizCards={quizCards}
+              groupIndex={quizGroupIndex}
+              totalGroups={quizTotalGroups}
+              onCompleteQuiz={handleCompleteQuiz}
+              onRepeatQuiz={() => handleStartGroupQuiz(quizCards, quizGroupIndex, quizTotalGroups)}
+              onNextGroup={() => {
+                const nextIdx = quizGroupIndex + 1;
+                const start = nextIdx * groupSize;
+                const nextGroupCards = activeDeckCards.slice(start, start + groupSize);
+                handleStartGroupQuiz(nextGroupCards, nextIdx, Math.ceil(activeDeckCards.length / groupSize));
+              }}
+              onBackToCards={() => setActiveView('cards')}
+            />
+          )}
+
+          {activeView === 'ebbinghaus' && (
+            <EbbinghausView
+              allDecks={decks}
+              onStartEbbinghausReview={handleStartEbbinghausReview}
             />
           )}
 

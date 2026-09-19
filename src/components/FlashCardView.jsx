@@ -4,12 +4,13 @@ import {
   RotateCw, 
   CheckCircle, 
   XCircle, 
-  Shuffle, 
   RefreshCcw, 
-  Sparkles,
   ArrowRight,
   ArrowLeft,
-  BookOpen
+  BookOpen,
+  Edit3,
+  Layers,
+  Sparkles
 } from 'lucide-react';
 import confetti from 'canvas-confetti';
 import { speakText } from '../utils/speech';
@@ -18,21 +19,40 @@ export default function FlashCardView({
   cards,
   activeDeckName,
   autoAudio,
+  cardOrder,
+  groupSize,
+  setGroupSize,
   onUpdateCardMastery,
-  onResetDeck
+  onResetDeck,
+  onStartGroupQuiz
 }) {
-  const [currentIndex, setCurrentIndex] = useState(0);
+  const [currentGroupIdx, setCurrentGroupIdx] = useState(0);
+  const [groupQueue, setGroupQueue] = useState([]);
+  const [cardIdxInGroup, setCardIdxInGroup] = useState(0);
   const [isFlipped, setIsFlipped] = useState(false);
+  const [groupMasteredCount, setGroupMasteredCount] = useState(0);
 
-  // Reset index when cards list changes or deck switches
+  // Divide all cards into groups of `groupSize`
+  const totalGroups = Math.max(1, Math.ceil(cards.length / groupSize));
+
+  // Initialize group queue when cards, groupSize, or currentGroupIdx changes
   useEffect(() => {
-    setCurrentIndex(0);
-    setIsFlipped(false);
-  }, [cards.length, activeDeckName]);
+    if (cards && cards.length > 0) {
+      const start = currentGroupIdx * groupSize;
+      const end = start + groupSize;
+      const groupCards = cards.slice(start, end);
+      setGroupQueue(groupCards);
+      setCardIdxInGroup(0);
+      setIsFlipped(false);
+      setGroupMasteredCount(0);
+    } else {
+      setGroupQueue([]);
+    }
+  }, [cards, groupSize, currentGroupIdx, activeDeckName]);
 
-  const currentCard = cards[currentIndex];
+  const currentCard = groupQueue[cardIdxInGroup];
 
-  // Speak word using SpeechSynthesis
+  // Speak word audio
   const handleSpeak = useCallback((textToSpeak, e) => {
     if (e) e.stopPropagation();
     if (textToSpeak) {
@@ -40,54 +60,45 @@ export default function FlashCardView({
     }
   }, []);
 
-  // Handle card flipping
+  // Card flipping
   const toggleFlip = useCallback(() => {
     const nextFlipped = !isFlipped;
     setIsFlipped(nextFlipped);
 
-    // Auto audio on reveal back or front if enabled
     if (autoAudio && currentCard && !isFlipped) {
       speakText(currentCard.english);
     }
   }, [isFlipped, autoAudio, currentCard]);
 
-  // Next / Previous navigation
-  const nextCard = useCallback(() => {
-    if (cards.length === 0) return;
-    setIsFlipped(false);
-    setCurrentIndex((prev) => (prev + 1) % cards.length);
-  }, [cards.length]);
-
-  const prevCard = useCallback(() => {
-    if (cards.length === 0) return;
-    setIsFlipped(false);
-    setCurrentIndex((prev) => (prev - 1 + cards.length) % cards.length);
-  }, [cards.length]);
-
-  // Mark as Mastered (Know)
+  // Mark card as Mastered or Unmastered
   const handleMarkMastered = useCallback((mastered, e) => {
     if (e) e.stopPropagation();
     if (!currentCard) return;
 
     onUpdateCardMastery(currentCard.id, mastered);
 
-    // Check if user mastered all cards in deck
-    const updatedMasteredCount = cards.filter(c => c.id === currentCard.id ? mastered : c.mastered).length;
-    if (mastered && updatedMasteredCount === cards.length) {
-      confetti({
-        particleCount: 120,
-        spread: 70,
-        origin: { y: 0.6 }
-      });
+    if (mastered) {
+      setGroupMasteredCount(prev => prev + 1);
+      
+      // Move to next card in group
+      if (cardIdxInGroup + 1 >= groupQueue.length) {
+        // Group study completed!
+        confetti({ particleCount: 120, spread: 70, origin: { y: 0.6 } });
+      } else {
+        setIsFlipped(false);
+        setCardIdxInGroup(prev => prev + 1);
+      }
+    } else {
+      // Unmastered -> Re-queue card at end of group queue so it repeats!
+      setGroupQueue(prev => [...prev, currentCard]);
+      setIsFlipped(false);
+      setCardIdxInGroup(prev => prev + 1);
     }
+  }, [currentCard, onUpdateCardMastery, cardIdxInGroup, groupQueue.length]);
 
-    nextCard();
-  }, [currentCard, onUpdateCardMastery, cards, nextCard]);
-
-  // Keyboard Shortcuts Listener
+  // Keyboard navigation
   useEffect(() => {
     const handleKeyDown = (e) => {
-      // Don't trigger if user is inside an input/textarea
       if (['INPUT', 'TEXTAREA'].includes(document.activeElement?.tagName)) return;
 
       if (e.code === 'Space') {
@@ -117,30 +128,96 @@ export default function FlashCardView({
         </div>
         <h3 className="text-lg font-bold text-mac-text mb-1">词库暂无卡片</h3>
         <p className="text-xs text-mac-subtext max-w-sm mb-4">
-          该筛选条件或词库中没有匹配的卡片，你可以切换侧边栏状态筛选，或批量导入单词。
+          该词库中没有匹配的卡片，您可以切换侧边栏，或批量导入单词。
         </p>
       </div>
     );
   }
 
-  const masteredCount = cards.filter(c => c.mastered).length;
-  const progressPercent = Math.round(((currentIndex + 1) / cards.length) * 100);
+  // Check if current group is finished
+  const isGroupFinished = cardIdxInGroup >= groupQueue.length;
+
+  if (isGroupFinished) {
+    const startIdx = currentGroupIdx * groupSize;
+    const currentGroupOriginalCards = cards.slice(startIdx, startIdx + groupSize);
+
+    return (
+      <div className="flex-1 flex flex-col items-center justify-center p-8 bg-mac-content text-center select-none animate-fade-in space-y-6">
+        <div className="w-20 h-20 rounded-full bg-blue-500/10 border border-blue-500/30 flex items-center justify-center text-blue-500 mb-2 shadow-lg">
+          <Sparkles className="w-10 h-10 animate-bounce" />
+        </div>
+        <div className="space-y-1">
+          <h2 className="text-2xl font-black text-mac-text">
+            第 {currentGroupIdx + 1} / {totalGroups} 组卡片阅读完毕！
+          </h2>
+          <p className="text-xs text-mac-subtext max-w-md">
+            您已完成本组 ({currentGroupOriginalCards.length} 个单词) 的翻卡背诵，不熟悉的卡片已完成组内重复学习。
+          </p>
+        </div>
+
+        <div className="flex items-center gap-3">
+          <button
+            onClick={() => onStartGroupQuiz(currentGroupOriginalCards, currentGroupIdx, totalGroups)}
+            className="flex items-center gap-2 px-6 py-3 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white font-bold text-xs shadow-lg transition-all active:scale-95"
+          >
+            <Edit3 className="w-4 h-4" />
+            <span>进入本组【拼写验证测验】✍️</span>
+          </button>
+
+          {currentGroupIdx + 1 < totalGroups && (
+            <button
+              onClick={() => setCurrentGroupIdx(prev => prev + 1)}
+              className="flex items-center gap-1.5 px-4 py-3 rounded-xl bg-mac-pill-bg hover:bg-mac-hover text-mac-text text-xs font-semibold border border-mac-border transition-all"
+            >
+              <span>背诵下一组 ({currentGroupIdx + 2}/{totalGroups})</span>
+              <ArrowRight className="w-4 h-4" />
+            </button>
+          )}
+        </div>
+      </div>
+    );
+  }
+
+  const progressPercent = Math.round(((cardIdxInGroup + 1) / groupQueue.length) * 100);
+
+  // Front & Back content depending on `cardOrder` ('en-zh' or 'zh-en')
+  const frontTitle = cardOrder === 'en-zh' ? currentCard.english : currentCard.chinese;
+  const backTitle = cardOrder === 'en-zh' ? currentCard.chinese : currentCard.english;
 
   return (
     <div className="flex-1 flex flex-col items-center justify-between p-6 bg-mac-content overflow-y-auto select-none">
-      {/* Header Info & Progress Bar */}
+      {/* Header Toolbar: Group Selector & Progress */}
       <div className="w-full max-w-xl flex flex-col gap-2">
         <div className="flex items-center justify-between text-xs text-mac-subtext font-medium">
+          {/* Group Switcher & Size */}
           <div className="flex items-center gap-2">
-            <span className="px-2 py-0.5 rounded bg-mac-pill-bg border border-mac-border font-mono text-[11px] text-mac-text">
-              {activeDeckName}
+            <span className="px-2.5 py-0.5 rounded bg-blue-500/15 text-blue-400 font-mono text-[11px] font-bold border border-blue-500/30">
+              第 {currentGroupIdx + 1} / {totalGroups} 组
             </span>
-            <span>当前卡片 {currentIndex + 1} / {cards.length}</span>
+
+            {/* Group Size Selector */}
+            <div className="flex items-center gap-1 text-[11px] bg-mac-pill-bg px-2 py-0.5 rounded border border-mac-border">
+              <span>每组:</span>
+              <select
+                value={groupSize}
+                onChange={(e) => setGroupSize(Number(e.target.value))}
+                className="bg-transparent text-mac-text font-bold focus:outline-none"
+              >
+                <option value={5}>5 词</option>
+                <option value={10}>10 词</option>
+                <option value={15}>15 词</option>
+                <option value={20}>20 词</option>
+              </select>
+            </div>
           </div>
-          <div className="flex items-center gap-2">
-            <span className="text-emerald-500 font-semibold">已掌握: {masteredCount}</span>
-            <span>•</span>
-            <span className="text-amber-500 font-semibold">未掌握: {cards.length - masteredCount}</span>
+
+          <div className="flex items-center gap-3">
+            <span className="text-mac-subtext">组内进度: {cardIdxInGroup + 1} / {groupQueue.length}</span>
+            {groupQueue.length > groupSize && (
+              <span className="text-amber-500 text-[11px] font-semibold bg-amber-500/10 px-2 py-0.5 rounded border border-amber-500/20">
+                组内重复中
+              </span>
+            )}
           </div>
         </div>
 
@@ -161,12 +238,11 @@ export default function FlashCardView({
             isFlipped ? 'rotate-y-180' : ''
           }`}
         >
-          {/* FRONT SIDE (English) */}
+          {/* FRONT SIDE */}
           <div className="absolute inset-0 w-full h-full rounded-2xl bg-mac-card-front backdrop-blur-2xl p-8 flex flex-col justify-between backface-hidden border border-white/10 shadow-lg">
-            {/* Top Badge */}
             <div className="flex items-center justify-between">
               <span className="px-2.5 py-1 rounded-full text-[11px] font-semibold tracking-wider bg-blue-500/10 text-blue-500 border border-blue-500/20">
-                正面 • 英文
+                {cardOrder === 'en-zh' ? '正面 • 英文' : '正面 • 中文'}
               </span>
               {currentCard.mastered && (
                 <span className="flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[11px] bg-emerald-500/15 text-emerald-500 font-medium border border-emerald-500/30">
@@ -175,14 +251,13 @@ export default function FlashCardView({
               )}
             </div>
 
-            {/* Word Center Display */}
             <div className="flex flex-col items-center justify-center text-center my-auto space-y-3">
-              <h2 className="text-4xl sm:text-5xl font-extrabold tracking-tight text-mac-text font-serif">
-                {currentCard.english}
+              <h2 className="text-3xl sm:text-5xl font-extrabold tracking-tight text-mac-text font-serif">
+                {frontTitle}
               </h2>
 
               <div className="flex items-center gap-3">
-                {currentCard.phonetic && (
+                {cardOrder === 'en-zh' && currentCard.phonetic && (
                   <span className="text-sm font-mono text-mac-subtext tracking-wide bg-mac-pill-bg px-3 py-1 rounded-md border border-mac-border">
                     {currentCard.phonetic}
                   </span>
@@ -202,29 +277,26 @@ export default function FlashCardView({
               </div>
             </div>
 
-            {/* Bottom Flip Hint */}
             <div className="flex items-center justify-center gap-1 text-xs text-mac-subtext font-medium opacity-75">
               <RotateCw className="w-3.5 h-3.5 animate-spin-slow" />
-              <span>点击卡片或按空格键翻面查看中文翻译</span>
+              <span>点击卡片或按空格键翻面查看翻译</span>
             </div>
           </div>
 
-          {/* BACK SIDE (Chinese & Example) */}
+          {/* BACK SIDE */}
           <div className="absolute inset-0 w-full h-full rounded-2xl bg-mac-card-back backdrop-blur-2xl p-8 flex flex-col justify-between backface-hidden rotate-y-180 border border-white/10 shadow-lg">
-            {/* Top Badge */}
             <div className="flex items-center justify-between">
               <span className="px-2.5 py-1 rounded-full text-[11px] font-semibold tracking-wider bg-emerald-500/10 text-emerald-400 border border-emerald-500/20">
-                背面 • 中文释义
+                {cardOrder === 'en-zh' ? '背面 • 中文释义' : '背面 • 英文拼写'}
               </span>
               <span className="text-xs font-mono text-mac-subtext font-semibold">
                 {currentCard.english}
               </span>
             </div>
 
-            {/* Chinese Definition Center */}
             <div className="flex flex-col items-center justify-center text-center my-auto space-y-4">
-              <h3 className="text-2xl sm:text-3xl font-bold text-mac-text tracking-wide leading-snug">
-                {currentCard.chinese}
+              <h3 className="text-2xl sm:text-4xl font-bold text-mac-text tracking-wide leading-snug">
+                {backTitle}
               </h3>
 
               {currentCard.exampleEn && (
@@ -250,7 +322,6 @@ export default function FlashCardView({
               )}
             </div>
 
-            {/* Bottom Flip Hint */}
             <div className="flex items-center justify-center gap-1 text-xs text-mac-subtext font-medium opacity-75">
               <RotateCw className="w-3.5 h-3.5" />
               <span>点击翻回正面</span>
@@ -268,7 +339,7 @@ export default function FlashCardView({
             className="flex-1 flex items-center justify-center gap-2 py-3 px-4 rounded-xl bg-red-500/10 hover:bg-red-500/20 text-red-500 font-semibold text-sm transition-all border border-red-500/30 shadow-sm active:scale-95"
           >
             <XCircle className="w-4 h-4" />
-            <span>还不熟 (←)</span>
+            <span>还不熟 (组内重复 ←)</span>
           </button>
 
           {/* Audio Speaker Button */}
@@ -290,32 +361,32 @@ export default function FlashCardView({
           </button>
         </div>
 
-        {/* Footer Card Navigation Toolbar */}
+        {/* Group Navigation Controls */}
         <div className="flex items-center justify-between w-full text-xs text-mac-subtext px-1">
           <button
-            onClick={prevCard}
-            className="flex items-center gap-1 hover:text-mac-text transition-colors p-1"
+            disabled={currentGroupIdx === 0}
+            onClick={() => setCurrentGroupIdx(prev => Math.max(0, prev - 1))}
+            className="flex items-center gap-1 hover:text-mac-text disabled:opacity-30 transition-colors p-1"
           >
             <ArrowLeft className="w-3.5 h-3.5" />
-            <span>上一张</span>
+            <span>上一组</span>
           </button>
 
-          <div className="flex items-center gap-4">
-            <button
-              onClick={onResetDeck}
-              className="flex items-center gap-1 hover:text-mac-text transition-colors"
-              title="重置本词库所有卡片掌握状态"
-            >
-              <RefreshCcw className="w-3 h-3" />
-              <span>重置进度</span>
-            </button>
-          </div>
+          <button
+            onClick={onResetDeck}
+            className="flex items-center gap-1 hover:text-mac-text transition-colors"
+            title="重置本词库所有卡片掌握状态"
+          >
+            <RefreshCcw className="w-3 h-3" />
+            <span>重置进度</span>
+          </button>
 
           <button
-            onClick={nextCard}
-            className="flex items-center gap-1 hover:text-mac-text transition-colors p-1"
+            disabled={currentGroupIdx + 1 >= totalGroups}
+            onClick={() => setCurrentGroupIdx(prev => Math.min(totalGroups - 1, prev + 1))}
+            className="flex items-center gap-1 hover:text-mac-text disabled:opacity-30 transition-colors p-1"
           >
-            <span>下一张</span>
+            <span>下一组</span>
             <ArrowRight className="w-3.5 h-3.5" />
           </button>
         </div>
