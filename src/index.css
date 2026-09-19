@@ -1,0 +1,84 @@
+@import "tailwindcss";
+
+@layer base {
+  :root {
+    --mac-bg: #f5f5f7;
+    --mac-content: #ffffff;
+    --mac-sidebar: rgba(246, 246, 248, 0.85);
+    --mac-header: rgba(255, 255, 255, 0.85);
+    --mac-pill-bg: #e8e8ed;
+    --mac-hover: rgba(0, 0, 0, 0.05);
+    --mac-text: #1d1d1f;
+    --mac-subtext: #86868b;
+    --mac-border: rgba(0, 0, 0, 0.1);
+    --mac-accent: #0066cc;
+    --mac-red: #ff5f57;
+    --mac-yellow: #febc2e;
+    --mac-green: #28c840;
+    --mac-card-front: rgba(255, 255, 255, 0.95);
+    --mac-card-back: rgba(248, 250, 252, 0.95);
+    --mac-card-border: rgba(0, 0, 0, 0.08);
+  }
+
+  .dark {
+    --mac-bg: #1e1e24;
+    --mac-content: #18181c;
+    --mac-sidebar: rgba(26, 26, 32, 0.85);
+    --mac-header: rgba(32, 32, 38, 0.85);
+    --mac-pill-bg: #2b2b32;
+    --mac-hover: rgba(255, 255, 255, 0.08);
+    --mac-text: #f5f5f7;
+    --mac-subtext: #98989d;
+    --mac-border: rgba(255, 255, 255, 0.1);
+    --mac-accent: #0a84ff;
+    --mac-red: #ff5f57;
+    --mac-yellow: #febc2e;
+    --mac-green: #28c840;
+    --mac-card-front: rgba(30, 30, 36, 0.95);
+    --mac-card-back: rgba(22, 27, 34, 0.95);
+    --mac-card-border: rgba(255, 255, 255, 0.12);
+  }
+}
+
+/* 3D Card Flip CSS Utilities */
+.perspective-1000 {
+  perspective: 1000px;
+}
+
+.transform-style-3d {
+  transform-style: preserve-3d;
+}
+
+.backface-hidden {
+  backface-visibility: hidden;
+  -webkit-backface-visibility: hidden;
+}
+
+.rotate-y-180 {
+  transform: rotateY(180deg);
+}
+
+/* Custom macOS Scrollbar */
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+::-webkit-scrollbar-thumb {
+  background: rgba(140, 140, 140, 0.3);
+  border-radius: 9999px;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: rgba(140, 140, 140, 0.5);
+}
+
+@keyframes spinSlow {
+  from { transform: rotate(0deg); }
+  to { transform: rotate(360deg); }
+}
+
+.animate-spin-slow {
+  animation: spinSlow 12s linear infinite;
+}

@@ -1,0 +1,51 @@
+{
+  "name": "flashlearn-mac",
+  "productName": "FlashLearn Pro",
+  "private": true,
+  "version": "1.0.0",
+  "type": "module",
+  "main": "electron/main.js",
+  "scripts": {
+    "dev": "vite",
+    "build": "vite build",
+    "lint": "oxlint",
+    "preview": "vite preview",
+    "electron:dev": "concurrently \"npm run dev\" \"wait-on http://localhost:5173 && electron .\"",
+    "build:mac": "vite build && electron-builder --mac"
+  },
+  "dependencies": {
+    "canvas-confetti": "^1.9.4",
+    "lucide-react": "^1.47.0",
+    "papaparse": "^5.7.0",
+    "react": "^19.2.8",
+    "react-dom": "^19.2.8"
+  },
+  "devDependencies": {
+    "@tailwindcss/vite": "^4.3.3",
+    "@types/react": "^19.2.18",
+    "@types/react-dom": "^19.2.7",
+    "@vitejs/plugin-react": "^6.1.1",
+    "concurrently": "^9.1.2",
+    "electron": "^34.5.8",
+    "electron-builder": "^25.1.8",
+    "oxlint": "^1.81.0",
+    "tailwindcss": "^4.3.3",
+    "vite": "^8.3.0",
+    "wait-on": "^8.0.2"
+  },
+  "build": {
+    "appId": "com.flashlearn.mac",
+    "productName": "FlashLearn Pro",
+    "directories": {
+      "output": "release"
+    },
+    "files": [
+      "dist/**/*",
+      "electron/**/*"
+    ],
+    "mac": {
+      "category": "public.app-category.education",
+      "target": ["dmg", "zip"]
+    }
+  }
+}
