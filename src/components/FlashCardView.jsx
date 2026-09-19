@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { 
   Volume2, 
   RotateCw, 
@@ -35,19 +35,32 @@ export default function FlashCardView({
   // Divide all cards into groups of `groupSize`
   const totalGroups = Math.max(1, Math.ceil(cards.length / groupSize));
 
-  // Initialize group queue when cards, groupSize, or currentGroupIdx changes
+  // Track previous deck name, group index, and group size to avoid resetting index when card metadata updates
+  const prevContextRef = useRef({ activeDeckName, currentGroupIdx, groupSize });
+
+  // Initialize group queue only when deck, group index, or group size actually changes
   useEffect(() => {
+    const prev = prevContextRef.current;
+    const isContextChanged = 
+      prev.activeDeckName !== activeDeckName || 
+      prev.currentGroupIdx !== currentGroupIdx || 
+      prev.groupSize !== groupSize;
+
     if (cards && cards.length > 0) {
       const start = currentGroupIdx * groupSize;
       const end = start + groupSize;
       const groupCards = cards.slice(start, end);
-      setGroupQueue(groupCards);
-      setCardIdxInGroup(0);
-      setIsFlipped(false);
+
+      if (isContextChanged || groupQueue.length === 0) {
+        setGroupQueue(groupCards);
+        setCardIdxInGroup(0);
+        setIsFlipped(false);
+        prevContextRef.current = { activeDeckName, currentGroupIdx, groupSize };
+      }
     } else {
       setGroupQueue([]);
     }
-  }, [cards, groupSize, currentGroupIdx, activeDeckName]);
+  }, [cards, groupSize, currentGroupIdx, activeDeckName, groupQueue.length]);
 
   const currentCard = groupQueue[cardIdxInGroup];
 
