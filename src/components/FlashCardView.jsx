@@ -9,8 +9,9 @@ import {
   ArrowLeft,
   BookOpen,
   Edit3,
-  Layers,
-  Sparkles
+  Sparkles,
+  ChevronLeft,
+  ChevronRight
 } from 'lucide-react';
 import confetti from 'canvas-confetti';
 import { speakText } from '../utils/speech';
@@ -30,7 +31,6 @@ export default function FlashCardView({
   const [groupQueue, setGroupQueue] = useState([]);
   const [cardIdxInGroup, setCardIdxInGroup] = useState(0);
   const [isFlipped, setIsFlipped] = useState(false);
-  const [groupMasteredCount, setGroupMasteredCount] = useState(0);
 
   // Divide all cards into groups of `groupSize`
   const totalGroups = Math.max(1, Math.ceil(cards.length / groupSize));
@@ -44,7 +44,6 @@ export default function FlashCardView({
       setGroupQueue(groupCards);
       setCardIdxInGroup(0);
       setIsFlipped(false);
-      setGroupMasteredCount(0);
     } else {
       setGroupQueue([]);
     }
@@ -70,6 +69,21 @@ export default function FlashCardView({
     }
   }, [isFlipped, autoAudio, currentCard]);
 
+  // Next & Prev Card Navigation
+  const handleNextCard = useCallback((e) => {
+    if (e) e.stopPropagation();
+    setIsFlipped(false);
+    setCardIdxInGroup(prev => prev + 1);
+  }, []);
+
+  const handlePrevCard = useCallback((e) => {
+    if (e) e.stopPropagation();
+    if (cardIdxInGroup > 0) {
+      setIsFlipped(false);
+      setCardIdxInGroup(prev => prev - 1);
+    }
+  }, [cardIdxInGroup]);
+
   // Mark card as Mastered or Unmastered
   const handleMarkMastered = useCallback((mastered, e) => {
     if (e) e.stopPropagation();
@@ -77,22 +91,16 @@ export default function FlashCardView({
 
     onUpdateCardMastery(currentCard.id, mastered);
 
-    if (mastered) {
-      setGroupMasteredCount(prev => prev + 1);
-      
-      // Move to next card in group
-      if (cardIdxInGroup + 1 >= groupQueue.length) {
-        // Group study completed!
-        confetti({ particleCount: 120, spread: 70, origin: { y: 0.6 } });
-      } else {
-        setIsFlipped(false);
-        setCardIdxInGroup(prev => prev + 1);
-      }
-    } else {
+    if (!mastered) {
       // Unmastered -> Re-queue card at end of group queue so it repeats!
       setGroupQueue(prev => [...prev, currentCard]);
-      setIsFlipped(false);
-      setCardIdxInGroup(prev => prev + 1);
+    }
+
+    setIsFlipped(false);
+    setCardIdxInGroup(prev => prev + 1);
+
+    if (cardIdxInGroup + 1 >= groupQueue.length && mastered) {
+      confetti({ particleCount: 120, spread: 70, origin: { y: 0.6 } });
     }
   }, [currentCard, onUpdateCardMastery, cardIdxInGroup, groupQueue.length]);
 
@@ -173,12 +181,24 @@ export default function FlashCardView({
               <ArrowRight className="w-4 h-4" />
             </button>
           )}
+
+          <button
+            onClick={() => {
+              setCardIdxInGroup(0);
+              const start = currentGroupIdx * groupSize;
+              setGroupQueue(cards.slice(start, start + groupSize));
+            }}
+            className="flex items-center gap-1.5 px-4 py-3 rounded-xl bg-mac-hover text-mac-subtext text-xs font-semibold transition-all"
+          >
+            <RefreshCcw className="w-3.5 h-3.5" />
+            <span>重背本组卡片</span>
+          </button>
         </div>
       </div>
     );
   }
 
-  const progressPercent = Math.round(((cardIdxInGroup + 1) / groupQueue.length) * 100);
+  const progressPercent = Math.min(100, Math.round(((cardIdxInGroup + 1) / groupQueue.length) * 100));
 
   // Front & Back content depending on `cardOrder` ('en-zh' or 'zh-en')
   const frontTitle = cardOrder === 'en-zh' ? currentCard.english : currentCard.chinese;
@@ -215,7 +235,7 @@ export default function FlashCardView({
             <span className="text-mac-subtext">组内进度: {cardIdxInGroup + 1} / {groupQueue.length}</span>
             {groupQueue.length > groupSize && (
               <span className="text-amber-500 text-[11px] font-semibold bg-amber-500/10 px-2 py-0.5 rounded border border-amber-500/20">
-                组内重复中
+                错词循环中
               </span>
             )}
           </div>
@@ -363,14 +383,26 @@ export default function FlashCardView({
 
         {/* Group Navigation Controls */}
         <div className="flex items-center justify-between w-full text-xs text-mac-subtext px-1">
-          <button
-            disabled={currentGroupIdx === 0}
-            onClick={() => setCurrentGroupIdx(prev => Math.max(0, prev - 1))}
-            className="flex items-center gap-1 hover:text-mac-text disabled:opacity-30 transition-colors p-1"
-          >
-            <ArrowLeft className="w-3.5 h-3.5" />
-            <span>上一组</span>
-          </button>
+          <div className="flex items-center gap-2">
+            <button
+              disabled={cardIdxInGroup === 0}
+              onClick={handlePrevCard}
+              className="flex items-center gap-1 hover:text-mac-text disabled:opacity-30 transition-colors p-1"
+              title="查看上一个单词"
+            >
+              <ChevronLeft className="w-3.5 h-3.5" />
+              <span>上一张</span>
+            </button>
+
+            <button
+              onClick={handleNextCard}
+              className="flex items-center gap-1 hover:text-mac-text transition-colors p-1"
+              title="查看下一个单词"
+            >
+              <span>下一张</span>
+              <ChevronRight className="w-3.5 h-3.5" />
+            </button>
+          </div>
 
           <button
             onClick={onResetDeck}
@@ -381,14 +413,25 @@ export default function FlashCardView({
             <span>重置进度</span>
           </button>
 
-          <button
-            disabled={currentGroupIdx + 1 >= totalGroups}
-            onClick={() => setCurrentGroupIdx(prev => Math.min(totalGroups - 1, prev + 1))}
-            className="flex items-center gap-1 hover:text-mac-text disabled:opacity-30 transition-colors p-1"
-          >
-            <span>下一组</span>
-            <ArrowRight className="w-3.5 h-3.5" />
-          </button>
+          <div className="flex items-center gap-2">
+            <button
+              disabled={currentGroupIdx === 0}
+              onClick={() => setCurrentGroupIdx(prev => Math.max(0, prev - 1))}
+              className="flex items-center gap-1 hover:text-mac-text disabled:opacity-30 transition-colors p-1"
+            >
+              <ArrowLeft className="w-3.5 h-3.5" />
+              <span>上一组</span>
+            </button>
+
+            <button
+              disabled={currentGroupIdx + 1 >= totalGroups}
+              onClick={() => setCurrentGroupIdx(prev => Math.min(totalGroups - 1, prev + 1))}
+              className="flex items-center gap-1 hover:text-mac-text disabled:opacity-30 transition-colors p-1"
+            >
+              <span>下一组</span>
+              <ArrowRight className="w-3.5 h-3.5" />
+            </button>
+          </div>
         </div>
       </div>
     </div>
